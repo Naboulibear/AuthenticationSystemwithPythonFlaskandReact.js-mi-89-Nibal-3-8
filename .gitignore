@@ -31,8 +31,11 @@ Thumbs.db
 
 # ignore log files and databases
 *.log
+*.db
 *.sql
 *.sqlite
+__pycache__/
+*.pyc
 
 # ignore compiled files
 *.com
