@@ -17,7 +17,7 @@ const Login = () => {
 		}
 
 		try {
-			const response = await fetch(`/api/login`, {
+			const response = await fetch(`http://localhost:3001/api/login`, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
@@ -40,7 +40,7 @@ const Login = () => {
 			// Redirect to private page
 			navigate("/private");
 		} catch (err) {
-			setError("An error occurred. Please try again.");
+			setError("Network error. Make sure backend is running on port 3001");
 			console.error(err);
 		}
 	};
