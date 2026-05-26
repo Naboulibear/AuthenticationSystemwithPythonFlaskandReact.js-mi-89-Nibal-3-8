@@ -32,8 +32,9 @@ const Private = () => {
 					return;
 				}
 
-				const userData = sessionStorage.getItem("user");
-				setUser(userData ? JSON.parse(userData) : null);
+				const userData = await response.json();
+				setUser(userData);
+				sessionStorage.setItem("user", JSON.stringify(userData));
 				setLoading(false);
 			} catch (err) {
 				console.error("Token verification failed:", err);
