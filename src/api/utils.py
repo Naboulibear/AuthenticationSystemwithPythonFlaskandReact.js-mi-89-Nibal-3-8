@@ -1,59 +1,107 @@
+"""
+This module takes care of common functionality
+"""
 import os
-from datetime import datetime, timedelta, timezone
-from functools import wraps
-
-from flask import current_app, jsonify, request
 import jwt
+from datetime import datetime, timedelta
+from functools import wraps
+from flask import jsonify
 
-try:
-    from .models import User
-except ImportError:  # pragma: no cover
-    from models import User
+class APIException(Exception):
+    status_code = 400
+
+    def __init__(self, message, status_code=None, payload=None):
+        super().__init__()
+        self.message = message
+        if status_code is not None:
+            self.status_code = status_code
+        self.payload = payload
+
+    def to_dict(self):
+        rv = dict(self.payload or ())
+        rv['message'] = self.message
+        return rv
 
 
-def _get_secret_key():
-    return current_app.config.get("JWT_SECRET_KEY") or os.getenv("JWT_SECRET_KEY", "dev-secret-key")
+def has_no_empty_params(rule):
+    defaults = rule.defaults if rule.defaults is not None else ()
+    arguments = rule.arguments if rule.arguments is not None else ()
+    return len(defaults) >= len(arguments)
 
 
-def generate_token(user):
-    payload = {
-        "sub": user.id,
-        "email": user.email,
-        "exp": datetime.now(timezone.utc) + timedelta(hours=24),
-    }
-    return jwt.encode(payload, _get_secret_key(), algorithm="HS256")
+def generate_sitemap(app):
+    links = []
+    for rule in app.url_map.iter_rules():
+        # if has_no_empty_params(rule):
+        url = url_for(rule.endpoint, **(rule.defaults or {}))
+        if "GET" in rule.methods:
+            links.append(
+                {
+                    "name": rule.endpoint,
+                    "methods": ["GET"],
+                    "url": url,
+                }
+            )
+    links.append(
+        {
+            "name": "negative",
+            "methods": ["GET"],
+            "url": "/negative",
+        }
+    )
+    return links
 
 
-def validate_token(token):
-    """Decode a JWT token.
+# JWT Token functions
+SECRET_KEY = os.getenv('SECRET_KEY', 'your-secret-key-change-this')
 
-    Raises:
-        jwt.ExpiredSignatureError: If token is expired.
-        jwt.InvalidTokenError: If token is invalid.
+
+def create_token(user_id, email):
     """
-    return jwt.decode(token, _get_secret_key(), algorithms=["HS256"])
+    Create a JWT token with user information
+    """
+    payload = {
+        'user_id': user_id,
+        'email': email,
+        'exp': datetime.utcnow() + timedelta(days=30),
+        'iat': datetime.utcnow()
+    }
+    token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
+    return token
 
 
-def token_required(handler):
-    @wraps(handler)
-    def wrapper(*args, **kwargs):
-        auth_header = request.headers.get("Authorization", "")
-        token = auth_header.replace("Bearer ", "", 1).strip()
+def verify_token(token):
+    """
+    Verify and decode a JWT token
+    """
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        return payload
+    except jwt.ExpiredSignatureError:
+        return None
+    except jwt.InvalidTokenError:
+        return None
 
-        if not token:
-            return jsonify({"message": "Missing token"}), 401
 
-        try:
-            payload = validate_token(token)
-            user = User.query.get(payload.get("sub"))
-            if not user:
-                return jsonify({"message": "Invalid token"}), 401
-            kwargs["current_user"] = user
-        except jwt.ExpiredSignatureError:
-            return jsonify({"message": "Token expired"}), 401
-        except jwt.InvalidTokenError:
-            return jsonify({"message": "Invalid token"}), 401
-
-        return handler(*args, **kwargs)
-
-    return wrapper
+def token_required(f):
+    """
+    Decorator to protect routes that require authentication
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        from flask import request
+        
+        auth_header = request.headers.get('Authorization', '')
+        
+        if not auth_header.startswith('Bearer '):
+            return jsonify({'error': 'Missing or invalid token'}), 401
+        
+        token = auth_header.split(' ')[1]
+        user_data = verify_token(token)
+        
+        if not user_data:
+            return jsonify({'error': 'Invalid or expired token'}), 401
+        
+        return f(*args, **kwargs)
+    
+    return decorated_function

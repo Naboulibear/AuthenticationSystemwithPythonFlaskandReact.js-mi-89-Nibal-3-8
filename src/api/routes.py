@@ -1,69 +1,108 @@
-from flask import Blueprint, jsonify, request
-from sqlalchemy.exc import IntegrityError
+"""
+This module takes care of starting the API Server, Loading the DB and Adding the endpoints
+"""
+from flask import request, jsonify, Blueprint
+from api.models import db, User
+from api.utils import APIException, create_token, verify_token
+from flask_cors import CORS
 
-try:
-    from .models import User, db
-    from .utils import generate_token, token_required
-except ImportError:  # pragma: no cover
-    from models import User, db
-    from utils import generate_token, token_required
-
-
-auth_api = Blueprint("auth_api", __name__)
+api = Blueprint('api', __name__)
+CORS(api)
 
 
-@auth_api.route("/signup", methods=["POST"])
+@api.route('/hello', methods=['POST', 'GET'])
+def handle_hello():
+    response_body = {
+        "message": "Hello! I'm a message that came from the backend"
+    }
+    return jsonify(response_body), 200
+
+
+@api.route('/signup', methods=['POST'])
 def signup():
-    data = request.get_json() or {}
-    email = data.get("email")
-    password = data.get("password")
-
-    if not email or not password:
-        return jsonify({"message": "Email and password are required"}), 400
-
-    existing_user = User.query.filter_by(email=email).first()
-    if existing_user:
-        return jsonify({"message": "Email already registered"}), 409
-
     try:
-        user = User(email=email)
-        user.set_password(password)
-        db.session.add(user)
+        body = request.get_json()
+        
+        if not body or 'email' not in body or 'password' not in body:
+            return jsonify({"error": "Email and password are required"}), 400
+        
+        email = body.get('email')
+        password = body.get('password')
+        
+        # Check if user already exists
+        existing_user = User.query.filter_by(email=email).first()
+        if existing_user:
+            return jsonify({"error": "User with this email already exists"}), 400
+        
+        # Create new user
+        new_user = User(email=email)
+        new_user.set_password(password)
+        
+        db.session.add(new_user)
         db.session.commit()
-    except IntegrityError:
-        db.session.rollback()
-        return jsonify({"message": "Email already registered"}), 409
-    except Exception:
-        db.session.rollback()
-        return jsonify({"message": "Unable to create user"}), 500
+        
+        return jsonify({
+            "message": "User created successfully",
+            "user": new_user.serialize()
+        }), 201
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-    return jsonify({"message": "User created successfully"}), 201
 
-
-@auth_api.route("/login", methods=["POST"])
+@api.route('/login', methods=['POST'])
 def login():
-    data = request.get_json() or {}
-    email = data.get("email")
-    password = data.get("password")
+    try:
+        body = request.get_json()
+        
+        if not body or 'email' not in body or 'password' not in body:
+            return jsonify({"error": "Email and password are required"}), 400
+        
+        email = body.get('email')
+        password = body.get('password')
+        
+        # Find user by email
+        user = User.query.filter_by(email=email).first()
+        
+        if not user or not user.check_password(password):
+            return jsonify({"error": "Invalid email or password"}), 401
+        
+        # Generate token
+        token = create_token(user.id, user.email)
+        
+        return jsonify({
+            "message": "Login successful",
+            "token": token,
+            "user": user.serialize()
+        }), 200
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-    if not email or not password:
-        return jsonify({"message": "Email and password are required"}), 400
 
-    user = User.query.filter_by(email=email).first()
-    if not user or not user.check_password(password):
-        return jsonify({"message": "Invalid credentials"}), 401
-
-    token = generate_token(user)
-    return jsonify({"token": token, "user": user.to_dict()}), 200
-
-
-@auth_api.route("/private", methods=["GET"])
-@token_required
-def private(current_user):
-    return jsonify({"message": "Access granted", "user": current_user.to_dict()}), 200
-
-
-@auth_api.route("/logout", methods=["POST"])
-@token_required
-def logout(current_user):
-    return jsonify({"message": "Logged out successfully"}), 200
+@api.route('/private', methods=['GET'])
+def private():
+    try:
+        # Get token from headers
+        auth_header = request.headers.get('Authorization', '')
+        
+        if not auth_header.startswith('Bearer '):
+            return jsonify({"error": "Missing or invalid token"}), 401
+        
+        token = auth_header.split(' ')[1]
+        user_data = verify_token(token)
+        
+        if not user_data:
+            return jsonify({"error": "Invalid token"}), 401
+        
+        user = User.query.get(user_data.get('user_id'))
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        
+        return jsonify({
+            "message": "Access granted to private area",
+            "user": user.serialize()
+        }), 200
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

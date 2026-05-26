@@ -1,48 +1,55 @@
+"""
+This module takes care of starting the API Server, Loading the DB and Adding the endpoints
+"""
 import os
-
-from flask import Flask, jsonify
+from flask import Flask, request, jsonify
+from flask_migrate import Migrate
 from flask_cors import CORS
+from api.utils import APIException, generate_sitemap
+from api.models import db
+from api.routes import api
+from api.admin import setup_admin
+from api.commands import setup_commands
 
-try:
-    from .models import db
-    from .routes import auth_api
-except ImportError:  # pragma: no cover
-    from models import db
-    from routes import auth_api
+ENV = "development" if os.getenv("FLASK_DEBUG") == "1" else "production"
+app = Flask(__name__)
+app.url_map.strict_slashes = False
 
+# database configuration
+db_url = os.getenv("DATABASE_URL")
+if db_url is not None:
+    app.config['SQLALCHEMY_DATABASE_URI'] = db_url.replace(
+        "postgres://", "postgresql://")
+else:
+    app.config['SQLALCHEMY_DATABASE_URI'] = "sqlite:////tmp/test.db"
 
-def create_app():
-    app = Flask(__name__)
-    CORS(app)
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+MIGRATE = Migrate(app, db, compare_type=True)
+db.init_app(app)
 
-    jwt_secret = os.getenv("JWT_SECRET_KEY")
-    if not jwt_secret:
-        if os.getenv("FLASK_ENV", "development") == "development":
-            jwt_secret = "dev-secret-key"
-        else:
-            raise RuntimeError("JWT_SECRET_KEY environment variable is required")
+# add CORS
+CORS(app)
 
-    app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL", "sqlite:///auth.db")
-    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-    app.config["JWT_SECRET_KEY"] = jwt_secret
+# add the admin
+setup_admin(app)
 
-    db.init_app(app)
+# add the commands
+setup_commands(app)
 
-    app.register_blueprint(auth_api, url_prefix="/api")
+# Add all endpoints from the API with a "api" prefix
+app.register_blueprint(api, url_prefix='/api')
 
-    @app.route("/api/health", methods=["GET"])
-    def health():
-        return jsonify({"status": "ok"}), 200
+# Handle/serialize errors like a JSON object
+@app.errorhandler(APIException)
+def handle_invalid_usage(error):
+    return jsonify(error.to_dict()), error.status_code
 
-    with app.app_context():
-        db.create_all()
+# generate sitemap with all your endpoints
+@app.route('/')
+def sitemap():
+    return generate_sitemap(app)
 
-    return app
-
-
-app = create_app()
-
-
-if __name__ == "__main__":
-    debug_mode = os.getenv("FLASK_DEBUG", "false").lower() == "true"
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 3001)), debug=debug_mode)
+# this only runs if `$ python src/app.py` is executed
+if __name__ == '__main__':
+    PORT = int(os.environ.get('PORT', 3001))
+    app.run(host='0.0.0.0', port=PORT, debug=True)

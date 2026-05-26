@@ -1,59 +1,53 @@
-import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { useGlobalReducer } from "../useGlobalReducer";
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-const Private = () => {
-const [loading, setLoading] = useState(true);
-const [user, setUser] = useState(null);
-const navigate = useNavigate();
-const { store, dispatch } = useGlobalReducer();
+export const Private = () => {
+    const navigate = useNavigate();
+    const [user, setUser] = useState(null);
+    const [loading, setLoading] = useState(true);
 
-useEffect(() => {
-if (!store.token) {
-navigate("/login");
-return;
-}
+    useEffect(() => {
+        // Check if token exists in sessionStorage
+        const token = sessionStorage.getItem('token');
+        const userData = sessionStorage.getItem('user');
 
-const validateSession = async () => {
-try {
-const response = await fetch("/api/private", {
-headers: {
-Authorization: `Bearer ${store.token}`
-}
-});
+        if (!token) {
+            // No token, redirect to login
+            navigate('/login');
+            return;
+        }
 
-if (!response.ok) {
-dispatch({ type: "LOGOUT" });
-navigate("/login");
-return;
-}
+        // Set user data if available
+        if (userData) {
+            setUser(JSON.parse(userData));
+        }
 
-const data = await response.json();
-setUser(data.user);
-setLoading(false);
-} catch (error) {
-dispatch({ type: "LOGOUT" });
-navigate("/login");
-}
+        setLoading(false);
+    }, [navigate]);
+
+    if (loading) {
+        return <div className="text-center mt-5">Loading...</div>;
+    }
+
+    return (
+        <div className="container mt-5">
+            <div className="row justify-content-center">
+                <div className="col-md-8">
+                    <div className="card">
+                        <div className="card-body">
+                            <h2 className="card-title">Welcome to Private Area</h2>
+                            {user && (
+                                <div>
+                                    <p className="card-text">Logged in as: <strong>{user.email}</strong></p>
+                                    <p className="card-text">User ID: {user.id}</p>
+                                    <p className="card-text">Status: {user.is_active ? 'Active' : 'Inactive'}</p>
+                                </div>
+                            )}
+                            <p className="card-text">This is a protected page that only authenticated users can access.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 };
-
-validateSession();
-}, [dispatch, navigate, store.token]);
-
-if (loading) {
-return <div className="container mt-5">Loading...</div>;
-}
-
-return (
-<div className="container mt-5">
-<div className="row">
-<div className="col-md-8 mx-auto">
-<h1>Private Dashboard</h1>
-<p className="lead">Welcome {user?.email}</p>
-</div>
-</div>
-</div>
-);
-};
-
-export default Private;
