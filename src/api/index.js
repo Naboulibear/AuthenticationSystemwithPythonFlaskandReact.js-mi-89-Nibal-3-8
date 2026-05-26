@@ -1,24 +1,22 @@
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
-const sqlite3 = require('sqlite3').verbose();
+const Database = require('better-sqlite3');
 const bcrypt = require('bcrypt');
+const path = require('path');
 
 const app = express();
-app.use(cors({ origin: 'http://localhost:3000' }));
+app.use(cors());
 app.use(express.json());
 
 const PORT = 3001;
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this';
+const JWT_SECRET = 'secret-key-change-this';
 
-// Initialize SQLite database
-const db = new sqlite3.Database(':memory:', (err) => {
-  if (err) console.error(err.message);
-  else console.log('Connected to SQLite database');
-});
+// Initialize SQLite database with file
+const db = new Database(path.join(__dirname, 'auth.db'));
 
 // Create users table
-db.run(`
+db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT UNIQUE NOT NULL,
@@ -42,33 +40,30 @@ app.post('/api/signup', async (req, res) => {
     }
 
     // Check if user exists
-    db.get('SELECT * FROM users WHERE email = ?', [email], async (err, row) => {
-      if (err) return res.status(500).json({ message: err.message });
-      if (row) return res.status(409).json({ message: 'Email already registered' });
+    const existingUser = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+    if (existingUser) {
+      return res.status(409).json({ message: 'Email already registered' });
+    }
 
-      // Hash password
-      const password_hash = await bcrypt.hash(password, 10);
+    // Hash password
+    const password_hash = await bcrypt.hash(password, 10);
 
-      // Insert user
-      db.run(
-        'INSERT INTO users (email, password_hash) VALUES (?, ?)',
-        [email, password_hash],
-        function (err) {
-          if (err) return res.status(500).json({ message: err.message });
-          res.status(201).json({
-            message: 'User created successfully',
-            user: { id: this.lastID, email, created_at: new Date().toISOString() }
-          });
-        }
-      );
+    // Insert user
+    const stmt = db.prepare('INSERT INTO users (email, password_hash) VALUES (?, ?)');
+    const result = stmt.run(email, password_hash);
+
+    res.status(201).json({
+      message: 'User created successfully',
+      user: { id: result.lastInsertRowid, email, created_at: new Date().toISOString() }
     });
   } catch (err) {
+    console.error('Signup error:', err);
     res.status(500).json({ message: err.message });
   }
 });
 
 // Login
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -76,27 +71,30 @@ app.post('/api/login', (req, res) => {
       return res.status(400).json({ message: 'Email and password are required' });
     }
 
-    db.get('SELECT * FROM users WHERE email = ?', [email], async (err, user) => {
-      if (err) return res.status(500).json({ message: err.message });
-      if (!user) return res.status(401).json({ message: 'Invalid credentials' });
+    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
 
-      // Check password
-      const validPassword = await bcrypt.compare(password, user.password_hash);
-      if (!validPassword) return res.status(401).json({ message: 'Invalid credentials' });
+    // Check password
+    const validPassword = await bcrypt.compare(password, user.password_hash);
+    if (!validPassword) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
 
-      // Generate token
-      const token = jwt.sign(
-        { user_id: user.id, email: user.email },
-        JWT_SECRET,
-        { expiresIn: '24h' }
-      );
+    // Generate token
+    const token = jwt.sign(
+      { user_id: user.id, email: user.email },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
 
-      res.json({
-        token,
-        user: { id: user.id, email: user.email, created_at: user.created_at }
-      });
+    res.json({
+      token,
+      user: { id: user.id, email: user.email, created_at: user.created_at }
     });
   } catch (err) {
+    console.error('Login error:', err);
     res.status(500).json({ message: err.message });
   }
 });
@@ -106,15 +104,18 @@ app.get('/api/user', (req, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
 
-    if (!token) return res.status(401).json({ message: 'No token provided' });
+    if (!token) {
+      return res.status(401).json({ message: 'No token provided' });
+    }
 
     const decoded = jwt.verify(token, JWT_SECRET);
-    db.get('SELECT * FROM users WHERE id = ?', [decoded.user_id], (err, user) => {
-      if (err) return res.status(500).json({ message: err.message });
-      if (!user) return res.status(404).json({ message: 'User not found' });
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(decoded.user_id);
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
 
-      res.json({ id: user.id, email: user.email, created_at: user.created_at });
-    });
+    res.json({ id: user.id, email: user.email, created_at: user.created_at });
   } catch (err) {
     if (err.name === 'TokenExpiredError') {
       return res.status(401).json({ message: 'Token expired' });
