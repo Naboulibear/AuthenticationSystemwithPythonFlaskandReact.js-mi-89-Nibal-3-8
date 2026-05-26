@@ -18,7 +18,7 @@ const Private = () => {
 		// Optionally verify token with backend
 		const verifyToken = async () => {
 			try {
-				const response = await fetch(`${process.env.REACT_APP_API_URL || "http://localhost:3001"}/api/user`, {
+				const response = await fetch(`http://localhost:3001/api/user`, {
 					headers: {
 						"Authorization": `Bearer ${token}`,
 					},
