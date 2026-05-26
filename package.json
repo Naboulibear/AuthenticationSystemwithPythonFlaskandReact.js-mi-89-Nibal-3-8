@@ -6,10 +6,11 @@
 	},
 	"description": "",
 	"main": "index.js",
+	"proxy": "http://localhost:3001",
 	"scripts": {
 		"start": "npm run start:frontend",
 		"start:frontend": "webpack-dev-server --mode development --port 3000",
-		"start:backend": "node src/api/index.js",
+		"start:backend": "python3 src/api/app.py",
 		"start:all": "sh -c 'npm run start:backend & npm run start:frontend'",
 		"build": "webpack --mode development",
 		"deploy:github": "node deploy-to-github.js"
