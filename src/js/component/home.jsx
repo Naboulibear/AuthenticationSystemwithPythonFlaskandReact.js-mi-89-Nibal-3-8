@@ -1,25 +1,73 @@
 import React from "react";
+import { BrowserRouter as Router, Routes, Route, Link, useNavigate } from "react-router-dom";
 
-//include images into your bundle
-import rigoImage from "../../img/rigo-baby.jpg";
+// Import components
+import Signup from "./signup.jsx";
+import Login from "./login.jsx";
+import Private from "./private.jsx";
 
-//create your first component
+// Navbar component
+const Navbar = () => {
+	const navigate = useNavigate();
+	const token = sessionStorage.getItem("token");
+
+	const handleLogout = () => {
+		sessionStorage.removeItem("token");
+		sessionStorage.removeItem("user");
+		navigate("/login");
+	};
+
+	return (
+		<nav className="navbar navbar-expand-lg navbar-dark bg-dark">
+			<div className="container-fluid">
+				<Link className="navbar-brand" to="/">Authentication System</Link>
+				<div className="navbar-nav ms-auto">
+					{token ? (
+						<button className="btn btn-outline-light" onClick={handleLogout}>Logout</button>
+					) : (
+						<>
+							<Link className="nav-link" to="/login">Login</Link>
+							<Link className="nav-link" to="/signup">Signup</Link>
+						</>
+					)}
+				</div>
+			</div>
+		</nav>
+	);
+};
+
+// Landing page
+const Landing = () => {
+	const token = sessionStorage.getItem("token");
+
+	return (
+		<div className="container mt-5 text-center">
+			<h1>Welcome to Authentication System</h1>
+			<p className="lead">A secure login and signup system built with React and Flask</p>
+			{token ? (
+				<Link to="/private" className="btn btn-primary btn-lg">Go to Dashboard</Link>
+			) : (
+				<>
+					<Link to="/login" className="btn btn-primary btn-lg me-2">Login</Link>
+					<Link to="/signup" className="btn btn-success btn-lg">Signup</Link>
+				</>
+			)}
+		</div>
+	);
+};
+
+// Main App Component with Router
 const Home = () => {
 	return (
-		<div className="text-center">
-			<h1 className="text-center mt-5">Hello Rigo!</h1>
-			<p>
-				<img src={rigoImage} />
-			</p>
-			<a href="#" className="btn btn-success">
-				If you see this green button... bootstrap is working...
-			</a>
-			<p>
-				Made by{" "}
-				<a href="http://www.4geeksacademy.com">4Geeks Academy</a>, with
-				love!
-			</p>
-		</div>
+		<Router>
+			<Navbar />
+			<Routes>
+				<Route path="/" element={<Landing />} />
+				<Route path="/signup" element={<Signup />} />
+				<Route path="/login" element={<Login />} />
+				<Route path="/private" element={<Private />} />
+			</Routes>
+		</Router>
 	);
 };
 
