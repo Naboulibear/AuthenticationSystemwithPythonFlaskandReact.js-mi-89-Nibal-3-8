@@ -5,9 +5,14 @@ from functools import wraps
 from flask import current_app, jsonify, request
 import jwt
 
+try:
+    from .models import User
+except ImportError:  # pragma: no cover
+    from models import User
+
 
 def _get_secret_key():
-    return current_app.config.get("JWT_SECRET_KEY") or os.getenv("JWT_SECRET_KEY", "super-secret-key")
+    return current_app.config.get("JWT_SECRET_KEY") or os.getenv("JWT_SECRET_KEY", "dev-secret-key")
 
 
 def generate_token(user):
@@ -20,6 +25,12 @@ def generate_token(user):
 
 
 def validate_token(token):
+    """Decode a JWT token.
+
+    Raises:
+        jwt.ExpiredSignatureError: If token is expired.
+        jwt.InvalidTokenError: If token is invalid.
+    """
     return jwt.decode(token, _get_secret_key(), algorithms=["HS256"])
 
 
@@ -34,8 +45,6 @@ def token_required(handler):
 
         try:
             payload = validate_token(token)
-            from models import User
-
             user = User.query.get(payload.get("sub"))
             if not user:
                 return jsonify({"message": "Invalid token"}), 401

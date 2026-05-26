@@ -1,7 +1,15 @@
+const tokenFromSession = sessionStorage.getItem("token");
+const userFromSession = JSON.parse(sessionStorage.getItem("user") || "null");
+const hasSessionAuth = Boolean(tokenFromSession && userFromSession);
+if (!hasSessionAuth) {
+sessionStorage.removeItem("token");
+sessionStorage.removeItem("user");
+}
+
 export const initialStore = {
-token: sessionStorage.getItem("token"),
-user: JSON.parse(sessionStorage.getItem("user") || "null"),
-isAuthenticated: Boolean(sessionStorage.getItem("token"))
+token: hasSessionAuth ? tokenFromSession : null,
+user: hasSessionAuth ? userFromSession : null,
+isAuthenticated: hasSessionAuth
 };
 
 const storeReducer = (store, action) => {

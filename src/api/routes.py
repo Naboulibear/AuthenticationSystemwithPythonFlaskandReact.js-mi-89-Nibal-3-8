@@ -1,7 +1,12 @@
 from flask import Blueprint, jsonify, request
+from sqlalchemy.exc import IntegrityError
 
-from models import User, db
-from utils import generate_token, token_required
+try:
+    from .models import User, db
+    from .utils import generate_token, token_required
+except ImportError:  # pragma: no cover
+    from models import User, db
+    from utils import generate_token, token_required
 
 
 auth_api = Blueprint("auth_api", __name__)
@@ -25,6 +30,9 @@ def signup():
         user.set_password(password)
         db.session.add(user)
         db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"message": "Email already registered"}), 409
     except Exception:
         db.session.rollback()
         return jsonify({"message": "Unable to create user"}), 500
