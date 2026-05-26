@@ -1,7 +1,6 @@
 {
 	"name": "react-hello",
 	"version": "1.0.1",
-	"proxy": "http://localhost:3001",
 	"engines": {
 		"node": "16.x"
 	},
