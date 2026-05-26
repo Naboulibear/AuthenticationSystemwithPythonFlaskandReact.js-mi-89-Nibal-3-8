@@ -17,7 +17,7 @@ const Signup = () => {
 		}
 
 		try {
-			const response = await fetch(`/api/signup`, {
+			const response = await fetch(`http://localhost:3001/api/signup`, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
@@ -34,7 +34,7 @@ const Signup = () => {
 			// Signup successful, redirect to login
 			navigate("/login");
 		} catch (err) {
-			setError("An error occurred. Please try again.");
+			setError("Network error. Make sure backend is running on port 3001");
 			console.error(err);
 		}
 	};
